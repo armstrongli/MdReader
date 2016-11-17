@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">MdReader</string>
+    <string name="title_activity_md_list">MdList</string>
+</resources>
