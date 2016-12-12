@@ -11,20 +11,23 @@ import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.view.View;
 import android.widget.AdapterView;
-import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.SimpleAdapter;
 import android.widget.TextView;
 
-import com.fragmentime.mdreader.mdconst.Const;
-
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
 public class MdList extends AppCompatActivity {
+
+    private Object lock = new Object();
+
+    public static final int REQUEST_PERMISSION_CODE = '1';
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -33,8 +36,13 @@ public class MdList extends AppCompatActivity {
 
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_SETTINGS, Manifest.permission.INTERNET}, '1');
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_SETTINGS, Manifest.permission.INTERNET}, REQUEST_PERMISSION_CODE);
         }
+
+//        try {
+//            lock.wait();
+//        } catch (InterruptedException e) {
+//        }
 
         Uri data = getIntent().getData();
         String pathContext = data == null ? "" : data.getPath();
@@ -68,29 +76,85 @@ public class MdList extends AppCompatActivity {
         }
     }
 
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+        if (requestCode == REQUEST_PERMISSION_CODE) {
+            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // Permission Granted
+                this.lock.notifyAll();
+            } else {
+                // Permission Denied
+                this.finish();
+            }
+        }
+    }
+
     private SimpleAdapter getMdFilesAdaptor(String path) {
         List<Map<String, Object>> mdList = new ArrayList<>();
-        Node node = getMardownFileList(path);
+        Node node = getMarkdownFileList(path);
         if (node != null) {
             node = node.right;
         }
         while (node != null) {
             Map<String, Object> file = new HashMap<>();
+            int iconIdx = R.drawable.folder;
+            if (node.name.toLowerCase().endsWith("md")) {
+                iconIdx = R.drawable.file_markdown;
+            } else if (node.name.toLowerCase().endsWith("html")) {
+                iconIdx = R.drawable.file_html;
+            }
+            file.put("fileIcon", iconIdx);
             file.put("fileName", node.name);
             file.put("filePath", node.path);
             mdList.add(file);
             node = node.left;
         }
-        return new SimpleAdapter(this, mdList, R.layout.activity_md_list_item, new String[]{"fileName", "filePath"}, new int[]{R.id.file_name, R.id.file_path});
+        return new SimpleAdapter(this, mdList, R.layout.activity_md_list_item, new String[]{"fileIcon", "fileName", "filePath"}, new int[]{R.id.file_icon, R.id.file_name, R.id.file_path});
     }
 
-    private Node getMardownFileList(String path) {
+    private Node getMarkdownFileList(String path) {
         File f = Environment.getExternalStorageDirectory();
 
         if (path != null && path.trim().startsWith(f.getAbsolutePath())) {
             f = new File(path);
         }
-        return getMarkdownFiles(f);
+        return sortMarkdownFilesList(getMarkdownFiles(f));
+    }
+
+    /**
+     * Sort the direct children of node
+     *
+     * @param node
+     * @return
+     */
+    private Node sortMarkdownFilesList(Node node) {
+        if (node == null) {
+            return node;
+        }
+        List<Node> nodes = new ArrayList<>();
+        Node current = node.right;
+        while (current != null) {
+            nodes.add(current);
+            current = current.left;
+        }
+        if (nodes.size() > 1) {
+            Collections.sort(nodes);
+            Iterator<Node> it = nodes.iterator();
+            Node firstNode = it.next(), currentSortItem = firstNode, sortItem = null;
+            while (it.hasNext()) {
+                sortItem = it.next();
+                currentSortItem.left = sortItem;
+                sortItem.parent = currentSortItem;
+                currentSortItem = sortItem;
+            }
+            sortItem.left = null;
+
+            node.right = firstNode;
+            firstNode.parent = node;
+        }
+        return node;
     }
 
     private Node getMarkdownFiles(File folder) {
@@ -115,14 +179,16 @@ public class MdList extends AppCompatActivity {
                         current = node;
 
                         current.right = media;
+                        media.parent = current;
                         current = media;
                     } else {
                         current.left = media;
+                        media.parent = current;
                         current = media;
                     }
                 }
             }
-        } else if (folder.getName().endsWith(".md")) {
+        } else if (folder.getName().toLowerCase().endsWith(".md") || folder.getName().toLowerCase().endsWith(".html")) {
             node = new Node();
             node.name = folder.getName();
             node.path = folder.getAbsolutePath();
@@ -132,11 +198,28 @@ public class MdList extends AppCompatActivity {
     }
 
 
-    private static class Node {
+    private static class Node implements Comparable<Node> {
         private String name;
         private String path;
         private boolean isFile;
+        private Node parent;
         private Node left;
         private Node right;
+
+        @Override
+        public int compareTo(Node another) {
+            if (this.isFile) {
+                if (another.isFile) {
+                    return this.name.compareTo(another.name);
+                }
+                return 1;
+            } else {
+                if (another.isFile) {
+                    return -1;
+                }
+                return this.name.compareTo(another.name);
+            }
+        }
+
     }
 }

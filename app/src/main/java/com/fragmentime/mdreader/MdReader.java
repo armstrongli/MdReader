@@ -22,6 +22,11 @@ import java.util.Objects;
 
 public class MdReader extends AppCompatActivity {
 
+
+    private Object lock = new Object();
+
+    public static final int REQUEST_PERMISSION_CODE = '1';
+
     private static String mdPath = null;
 
     @Override
@@ -43,8 +48,14 @@ public class MdReader extends AppCompatActivity {
         });
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_SETTINGS, Manifest.permission.INTERNET}, '1');
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_SETTINGS, Manifest.permission.INTERNET}, REQUEST_PERMISSION_CODE);
         }
+
+//        try {
+//            lock.wait();
+//        } catch (InterruptedException e) {
+//        }
+
         try {
             mdPath = getIntent().getData().getPath();
         } catch (Exception e) {
@@ -55,26 +66,19 @@ public class MdReader extends AppCompatActivity {
         wvShow.loadUrl("file:///android_asset/show.html");
     }
 
-    private List<String> getMardownFileList() {
-        File f = Environment.getExternalStorageDirectory();
-        List<String> mdFiles = getMarkdownFiles(f);
-        return mdFiles;
-    }
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
 
-    private List<String> getMarkdownFiles(File folder) {
-        List<String> filePath = new ArrayList<>();
-        if (folder.isDirectory()) {
-            File[] subFiles = folder.listFiles();
-            if (subFiles == null) {
-                return filePath;
+        if (requestCode == REQUEST_PERMISSION_CODE) {
+            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // Permission Granted
+                this.lock.notifyAll();
+            } else {
+                // Permission Denied
+                this.finish();
             }
-            for (File item : subFiles) {
-                filePath.addAll(getMarkdownFiles(item));
-            }
-        } else if (folder.getName().endsWith(".md")) {
-            filePath.add(folder.getAbsolutePath());
         }
-        return filePath;
     }
 
     private static class Md {
@@ -82,7 +86,7 @@ public class MdReader extends AppCompatActivity {
         @JavascriptInterface
         public String getParsedData() {
             if (mdPath == null || mdPath.trim().length() == 0) {
-                return "<h1>Please open files from file explorer :)</h1>";
+                return "<h1>Ops! Markdown Reader cannot go there you just want to go :)</h1>";
             }
             try {
                 return MarkdownJ.parseFile(mdPath);
