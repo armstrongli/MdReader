@@ -1,9 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
+    signingConfigs {
+    }
     compileSdkVersion 23
     buildToolsVersion "24.0.2"
-
     defaultConfig {
         applicationId "com.fragmentime.mdreader"
         minSdkVersion 15
@@ -21,7 +22,7 @@ android {
 
 dependencies {
     compile fileTree(include: ['*.jar'], dir: 'libs')
-    compile files('libs/markdownj-0.0.4.jar')
+    compile files('libs/markdownj-0.1.0.jar')
     testCompile 'junit:junit:4.12'
     compile 'com.android.support:appcompat-v7:23.1.0'
     compile 'com.android.support:design:23.1.0'

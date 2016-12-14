@@ -4,6 +4,7 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
 import android.support.v4.app.ActivityCompat;
@@ -25,42 +26,29 @@ import java.util.Map;
 
 public class MdList extends AppCompatActivity {
 
-    private Object lock = new Object();
+    private class StartReaderTask extends AsyncTask<Uri, Void, Void> {
+        @Override
+        protected Void doInBackground(Uri... params) {
+            Intent mdReaderIntent = new Intent(MdList.this, MdReader.class);
+            mdReaderIntent.setData(params[0]);
+            MdList.this.startActivity(mdReaderIntent);
+            return null;
+        }
+    }
 
-    public static final int REQUEST_PERMISSION_CODE = '1';
+    private class MarkdownFileLoaderTask extends AsyncTask<Uri, Void, SimpleAdapter> {
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_md_list);
-
-
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_SETTINGS, Manifest.permission.INTERNET}, REQUEST_PERMISSION_CODE);
+        @Override
+        protected SimpleAdapter doInBackground(Uri... params) {
+            Uri data = getIntent().getData();
+            String pathContext = data == null ? "" : data.getPath();
+            return getMdFilesAdaptor(pathContext);
         }
 
-//        try {
-//            lock.wait();
-//        } catch (InterruptedException e) {
-//        }
-
-        Uri data = getIntent().getData();
-        String pathContext = data == null ? "" : data.getPath();
-        File mdFile = new File(pathContext);
-        if (mdFile.exists() && !mdFile.isDirectory()) {
-            // start mdShow
-            Intent mdReaderIntent = new Intent(this, MdReader.class);
-            Uri uri = Uri.fromFile(mdFile);
-            mdReaderIntent.setData(uri);
-            this.startActivity(mdReaderIntent);
-            this.finish();
-            return;
-        }
-
-        ListView lv = (ListView) findViewById(R.id.listView);
-        if (lv != null) {
-            final SimpleAdapter adapter = getMdFilesAdaptor(pathContext);
-            lv.setAdapter(adapter);
+        @Override
+        protected void onPostExecute(SimpleAdapter markdownFileListAdapter) {
+            ListView lv = (ListView) MdList.this.findViewById(R.id.listView);
+            lv.setAdapter(markdownFileListAdapter);
             lv.setOnItemClickListener(new AdapterView.OnItemClickListener() {
                 @Override
                 public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
@@ -76,6 +64,44 @@ public class MdList extends AppCompatActivity {
         }
     }
 
+    public static final int REQUEST_PERMISSION_CODE = '1';
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_md_list);
+
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.READ_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                    Manifest.permission.READ_EXTERNAL_STORAGE)) {
+            } else {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{
+                                Manifest.permission.READ_EXTERNAL_STORAGE,
+                                Manifest.permission.WRITE_SETTINGS,
+                                Manifest.permission.INTERNET
+                        }, REQUEST_PERMISSION_CODE);
+            }
+        }
+        runMdListActivities();
+    }
+
+    private void runMdListActivities() {
+        Uri data = getIntent().getData();
+        String pathContext = data == null ? "" : data.getPath();
+        File mdFile = new File(pathContext);
+        if (mdFile.exists() && !mdFile.isDirectory()) {
+            // start mdShow
+            new StartReaderTask().execute(data);
+            this.finish();
+        } else {
+            // load mark down file list
+            new MarkdownFileLoaderTask().execute(data);
+        }
+    }
+
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
@@ -83,7 +109,7 @@ public class MdList extends AppCompatActivity {
         if (requestCode == REQUEST_PERMISSION_CODE) {
             if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 // Permission Granted
-                this.lock.notifyAll();
+                runMdListActivities();
             } else {
                 // Permission Denied
                 this.finish();
