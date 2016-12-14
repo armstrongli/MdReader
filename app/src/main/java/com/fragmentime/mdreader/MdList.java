@@ -100,10 +100,12 @@ public class MdList extends AppCompatActivity {
         while (node != null) {
             Map<String, Object> file = new HashMap<>();
             int iconIdx = R.drawable.folder;
-            if (node.name.toLowerCase().endsWith("md")) {
-                iconIdx = R.drawable.file_markdown;
-            } else if (node.name.toLowerCase().endsWith("html")) {
-                iconIdx = R.drawable.file_html;
+            if (node.isFile) {
+                if (node.name.toLowerCase().endsWith(".md")) {
+                    iconIdx = R.drawable.file_markdown;
+                } else if (node.name.toLowerCase().endsWith("html")) {
+                    iconIdx = R.drawable.file_html;
+                }
             }
             file.put("fileIcon", iconIdx);
             file.put("fileName", node.name);
